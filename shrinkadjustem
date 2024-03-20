@@ -1,0 +1,97 @@
+set statistics io on
+select si.storeid,s.storedescription,si.productid,p.productdescription,max(lastcountdate) as lastcount,
+qty,repcountqty,Refilllevel,maxinventory,max(pt.shippeddate)as lastshipped,
+(si.Maxinventory - (si.refilllevel-1))* p.costtokroger
+,ks.totalsaleslast30days as unitssold,yearsales.totalsaleslastyear as yearsales
+,yearshipped.shippedyear
+
+,adjustment.adjustmentdate
+,qbinv.lastinvoice as lastinvoice
+ from tblstoreiteminventory si
+ cross apply
+ (
+    SELECT
+       sum(k.totalsales) as totalsaleslast30days
+    FROM tblkrogerscans  k 
+	 WITH (INDEX(0))
+	--The no index is necessary to stop the keylookup and lazy spool
+	 --Table 'tblkrogerscans'. Scan count 2546, logical reads 550928, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
+    WHERE k.selldate between  getdate() -30 and getdate()
+	--convert(date, dateadd(dd, -30, getdate())) and getdate()
+	and k.productid = si.productid and k.storeid = si.storeid
+) ks
+ cross apply
+ (
+    SELECT
+       sum(k.totalsales) as totalsaleslastyear
+    FROM tblkrogerscans  k 
+	WITH (INDEX(0))
+	--The no index is necessary to stop the keylookup and lazy spool
+    WHERE k.selldate between cast(getdate() -360 as date) and getdate()
+	and k.productid = si.productid and k.storeid = si.storeid
+) yearsales
+cross apply
+( select sum(shippedqty) as shippedyear from tblpicktickets pt
+where pt.shippeddate  between  getdate() -360 and getdate()
+--convert(date, dateadd(dd, -360, getdate())) and getdate()
+and si.productid = pt.productid and si.storeid = pt.storeid
+) yearshipped 
+
+outer apply
+(
+select max(adjustmentdate) as adjustmentdate from tbladjustments a
+where si.storeid= a.storeid and si.ProductID = a.productid
+
+--having max(adjustmentdate) < '2021-02-01'
+) adjustment
+outer apply
+(
+select max(invoicedate) as lastinvoice 
+from tblkrogerqb  q
+where si.storeid =q.storeid and si.ProductID = q.productid
+) qbinv
+
+
+join tblstore s 
+on si.storeid = s.storeid
+left join tblpicktickets pt
+ on si.storeid = pt.storeid and si.productid = pt.productid
+join tblproducts p 
+on si.productid = p.productid 
+join entityProductPacksItems ppi
+on p.productid = ppi.productid
+--and ppi.prodtypeid = 10
+
+where 
+--lastcountdate < '2024-03-18' and
+--isnull(adjustmentdate,'2022-01-01') < '2022-01-02'
+----not in('2022-01-11','2022-01-12')
+-- and
+  autorefill = 'Y'
+  --and refill = 'N'
+ --and si.productid =26602
+--and qty =refilllevel
+  --and si.storeid not in ('2769','1816','39949','214')
+ --and qty between refilllevel  and refilllevel + 5
+--and yearsales.totalsaleslastyear > 50
+ --and s.DivisionID =5 
+ and si.productid not in (select productid from entityProductPacksItems where prodtypeid =9)
+
+
+
+
+group by si.storeid,s.storedescription,si.productid,qty,repcountqty,Refilllevel,maxinventory,p.CosttoKroger,p.ProductDescription
+,ks.totalsaleslast30days,yearsales.totalsaleslastyear,yearshipped.shippedyear
+,adjustment.adjustmentdate
+,qbinv.lastinvoice,s.DivisionID,si.storeid
+ having max(isnull(shippeddate, '2022-01-01')) <'2024-03-01' 
+  and yearsales.totalsaleslastyear > 0
+  and max(isnull(lastcountdate,'2024-03-01')) < '2024-03-18'
+  --and max(qbinv.lastinvoice) < '2021-04-20'
+  --order by yearsales desc
+ order by s.DivisionID,si.storeid
+ --without query hints --07 seconds
+  --option (maxdop 1) -- 08 seconds
+  --option (maxdop 5)  --06 seconds
+  option (maxdop 4)
+
