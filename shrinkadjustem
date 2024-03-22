@@ -1,3 +1,6 @@
+--Use this to find items in the remote inventory locations that have not been adjusted for shrink.
+-- I built this awhile ago, but it needs be parameterized so junior SQL people don't have to make all the date,div and qty changes in the code.
+
 set statistics io on
 select si.storeid,s.storedescription,si.productid,p.productdescription,max(lastcountdate) as lastcount,
 qty,repcountqty,Refilllevel,maxinventory,max(pt.shippeddate)as lastshipped,
@@ -15,7 +18,7 @@ qty,repcountqty,Refilllevel,maxinventory,max(pt.shippeddate)as lastshipped,
     FROM tblkrogerscans  k 
 	 WITH (INDEX(0))
 	--The no index is necessary to stop the keylookup and lazy spool
-	 --Table 'tblkrogerscans'. Scan count 2546, logical reads 550928, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
+	 --Table 'tblscans'. Scan count 2546, logical reads 550928, physical reads 0, read-ahead reads 0, lob logical reads 0, lob physical reads 0, lob read-ahead reads 0.
     WHERE k.selldate between  getdate() -30 and getdate()
 	--convert(date, dateadd(dd, -30, getdate())) and getdate()
 	and k.productid = si.productid and k.storeid = si.storeid
