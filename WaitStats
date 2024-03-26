@@ -1,0 +1,15 @@
+
+--Replace Wait_Type with the wait that is showing an increase that you want to investigate.
+
+  WITH cte AS
+( SELECT Wait_Type,Wait_Time_Seconds, DateAdded,
+         PreviousValue = LAG(Wait_Time_Seconds) OVER (ORDER BY DateAdded)
+  FROM [DATASTORE].[dbo].[Waitstats]
+  Where  Wait_Type = 'WAIT_ON_SYNC_STATISTICS_REFRESH'
+) 
+SELECT Wait_Type,Wait_Time_Seconds, DateAdded,PreviousValue
+FROM cte
+WHERE Previousvalue < Wait_Time_Seconds
+   OR PreviousValue IS NULL
+   and Wait_Type = 'WAIT_ON_SYNC_STATISTICS_REFRESH'
+   order by DateAdded
