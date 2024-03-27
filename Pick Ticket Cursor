@@ -1,0 +1,65 @@
+--This is just a quick cursor to pull from store inventory and create a pick ticket.
+-- Of course EDI Scan data needs to be loaded first, 
+--EricG updated 6/16/2020
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER Procedure [dbo].[usp_whrefilltestcursor]
+
+@sid int
+
+
+as
+
+
+declare @prodid int
+declare @refillqty int
+declare @date date
+declare @status varchar(25)
+
+
+
+
+
+declare wucursor cursor for
+select t.storeid,t.productid,
+case 
+when t.qty < 0 then
+ t.maxinventory  
+ when t.qty >= 0 THen t.maxinventory - t.qty end,
+ cast(getdate() as date),'Open' from tblstoreiteminventory t
+left join tblproducts p
+on t.productid = p.productid
+left join tblstore s
+on t.storeid = s.storeid
+where refill = 'Y' and s.storeid = @sid
+and autorefill = 'Y'
+and p.active = 'Y'
+
+	open wucursor
+	continuecursor:
+	fetch next from wucursor into @sid,@prodid,@refillqty,@date,@status
+	
+	while @@FETCH_STATUS = 0
+	Begin try
+
+	Insert into tblPickTickets(storeid,productid,refillqty,orderdate,status)
+	values
+	(@sid,@prodid,@refillqty,@date,@status
+)
+	
+	fetch next from wucursor into @sid,@prodid,@refillqty,@date,@status
+	End try
+	Begin Catch
+	goto continuecursor
+	End catch
+	
+	close wucursor
+	deallocate wucursor
+
+
+
+
+	
